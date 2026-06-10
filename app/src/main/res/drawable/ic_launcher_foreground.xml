@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:translateX="22"
+        android:translateY="22">
+        <!-- 时钟图标 -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M32,8C18.745,8 8,18.745 8,32s10.745,24 24,24s24,-10.745 24,-24S45.255,8 32,8zM32,52c-11.046,0 -20,-8.954 -20,-20s8.954,-20 20,-20s20,8.954 20,20S43.046,52 32,52z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M30,18v15.555l10.39,6.224l2,-3.334L34,30.889V18H30z" />
+    </group>
+</vector>

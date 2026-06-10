@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>任务倒计时 App 预览</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, 'Noto Sans SC', sans-serif; }
+  body { background: #1a1a2e; display: flex; justify-content: center; align-items: center; min-height: 100vh; gap: 40px; flex-wrap: wrap; padding: 40px; }
+
+  .phone {
+    width: 380px;
+    height: 780px;
+    background: #0f0f23;
+    border-radius: 40px;
+    padding: 12px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 2px #2a2a4a;
+    position: relative;
+  }
+  .phone-inner {
+    width: 100%;
+    height: 100%;
+    background: #1a1a2e;
+    border-radius: 30px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+  .notch {
+    width: 120px; height: 25px;
+    background: #0f0f23;
+    border-radius: 0 0 16px 16px;
+    position: absolute;
+    top: 0; left: 50%; transform: translateX(-50%);
+    z-index: 10;
+  }
+
+  /* ===== Screen 1: Setup ===== */
+  .screen-setup { display: flex; flex-direction: column; height: 100%; }
+  .topbar {
+    background: #1976D2; padding: 16px 20px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .topbar .title { color: white; font-size: 20px; font-weight: 700; }
+  .hint {
+    color: #8899aa; font-size: 13px; padding: 10px 16px 6px;
+    text-align: center;
+  }
+  .task-list { flex: 1; overflow-y: auto; padding: 4px 16px; display: flex; flex-direction: column; gap: 8px; }
+
+  .task-card {
+    background: #16213e; border-radius: 12px; padding: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+  .task-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .task-num {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: #BBDEFB; color: #1976D2;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; flex-shrink: 0;
+  }
+  .task-input {
+    flex: 1; background: #1a1a2e; border: 1px solid #2a2a4a;
+    border-radius: 8px; padding: 10px 12px;
+    color: white; font-size: 15px; outline: none;
+  }
+  .task-input::placeholder { color: #556677; }
+
+  .time-row { display: flex; align-items: center; gap: 8px; padding-left: 36px; }
+  .time-icon { color: #2196F3; font-size: 18px; }
+  .time-label { color: #aabbcc; font-size: 14px; margin-right: 4px; }
+  .time-input {
+    width: 70px; background: #1a1a2e; border: 1px solid #2a2a4a;
+    border-radius: 8px; padding: 8px; color: white; font-size: 14px;
+    text-align: center; outline: none;
+  }
+  .time-colon { color: white; font-size: 20px; font-weight: 700; }
+  .time-unit { color: #556677; font-size: 11px; text-align: center; margin-top: 2px; }
+
+  .add-btn {
+    width: 100%; padding: 12px; margin: 4px 0;
+    background: transparent; border: 1px dashed #2196F3; border-radius: 10px;
+    color: #2196F3; font-size: 14px; cursor: pointer; transition: 0.2s;
+  }
+  .add-btn:hover { background: rgba(33,150,243,0.1); }
+
+  .bottom-bar {
+    padding: 16px; box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
+    background: #16213e;
+  }
+  .start-btn {
+    width: 100%; padding: 16px; border: none; border-radius: 12px;
+    background: linear-gradient(135deg, #2196F3, #1976D2);
+    color: white; font-size: 20px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    cursor: pointer; transition: 0.2s;
+  }
+  .start-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(33,150,243,0.4); }
+  .delete-btn { color: #E53935; font-size: 20px; cursor: pointer; padding: 4px; visibility: hidden; }
+  .delete-btn.show { visibility: visible; }
+
+  /* ===== Screen 2: Countdown ===== */
+  .screen-countdown {
+    display: flex; flex-direction: column; height: 100%;
+    background: #1a1a2e; align-items: center; justify-content: center;
+    padding: 40px;
+  }
+  .progress-text { color: rgba(255,255,255,0.5); font-size: 15px; margin-bottom: 12px; }
+  .task-name { color: white; font-size: 26px; font-weight: 700; margin-bottom: 40px; text-align: center; }
+  .countdown-number {
+    font-size: 96px; font-weight: 800; text-align: center;
+    transition: color 0.3s;
+  }
+  .countdown-number.white { color: white; }
+  .countdown-number.red { color: #E53935; animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+  .last-minute-hint {
+    color: #E53935; font-weight: 700; font-size: 16px; margin-top: 12px;
+  }
+  .progress-bar-wrap {
+    width: 100%; max-width: 300px; height: 6px;
+    background: rgba(255,255,255,0.1); border-radius: 3px;
+    margin-top: 40px; overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%; border-radius: 3px; transition: width 0.5s, background 0.3s;
+  }
+  .progress-bar-fill.blue { background: #2196F3; }
+  .progress-bar-fill.red { background: #E53935; }
+  .stop-btn {
+    margin-top: 24px; padding: 8px 24px;
+    background: transparent; border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 20px; color: rgba(255,255,255,0.5); font-size: 14px; cursor: pointer;
+  }
+
+  /* ===== Screen 3: Congratulations ===== */
+  .screen-completed {
+    display: flex; flex-direction: column; height: 100%;
+    background: #1a1a2e; align-items: center; justify-content: center;
+    padding: 40px;
+  }
+  .star-icon { font-size: 100px; margin-bottom: 16px; animation: starAnim 0.6s ease-in-out infinite alternate; }
+  @keyframes starAnim {
+    0% { transform: scale(0.8) rotate(-10deg); }
+    100% { transform: scale(1.1) rotate(10deg); }
+  }
+  .congrats-title { color: #FFC107; font-size: 38px; font-weight: 800; margin-bottom: 12px; }
+  .congrats-sub { color: white; font-size: 26px; font-weight: 600; margin-bottom: 6px; }
+  .congrats-count { color: rgba(255,255,255,0.6); font-size: 18px; margin-bottom: 32px; }
+
+  .review-card {
+    width: 100%; background: rgba(255,255,255,0.05); border-radius: 16px; padding: 16px;
+  }
+  .review-title { color: rgba(255,255,255,0.6); font-size: 15px; font-weight: 600; margin-bottom: 10px; }
+  .review-item {
+    display: flex; align-items: center; padding: 6px 0;
+    color: white; font-size: 15px;
+  }
+  .review-idx { color: #2196F3; font-weight: 700; width: 28px; }
+  .review-name { flex: 1; }
+  .review-time { color: rgba(255,255,255,0.5); font-size: 13px; }
+
+  .restart-btn {
+    width: 100%; margin-top: 28px; padding: 16px;
+    background: linear-gradient(135deg, #2196F3, #1976D2);
+    border: none; border-radius: 12px;
+    color: white; font-size: 16px; font-weight: 700; cursor: pointer;
+  }
+
+  .phone-label {
+    text-align: center; color: #8899aa; margin-top: 12px; font-size: 13px;
+  }
+
+  /* tab切换 */
+  .tabs {
+    display: flex; justify-content: center; gap: 12px;
+    margin-bottom: 16px; width: 100%; max-width: 420px;
+  }
+  .tab-btn {
+    padding: 8px 20px; border-radius: 20px; border: 1px solid #2a2a4a;
+    background: transparent; color: #8899aa; cursor: pointer; font-size: 14px; transition: 0.2s;
+  }
+  .tab-btn.active { background: #2196F3; color: white; border-color: #2196F3; }
+  .phone-wrap { display: none; flex-direction: column; align-items: center; }
+  .phone-wrap.active { display: flex; }
+  .phones-container { display: flex; gap: 40px; flex-wrap: wrap; justify-content: center; }
+</style>
+</head>
+<body>
+
+<div style="position:fixed; top:20px; left:0; right:0; text-align:center; color:#556677; font-size:14px; z-index:100;">
+  📱 点击下方标签切换三个画面预览
+</div>
+
+<div style="margin-top: 60px;">
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab(0)">⏱ 设置画面</button>
+    <button class="tab-btn" onclick="switchTab(1)">⏳ 倒计时画面</button>
+    <button class="tab-btn" onclick="switchTab(2)">🎉 恭喜画面</button>
+  </div>
+
+  <div class="phones-container">
+    <!-- Screen 1: Setup -->
+    <div class="phone-wrap active" id="screen-0">
+      <div class="phone">
+        <div class="phone-inner">
+          <div class="notch"></div>
+          <div class="screen-setup">
+            <div class="topbar"><span class="title">⏱ 任务设定</span></div>
+            <div class="hint">请输入任务名称并设定倒计时时间</div>
+            <div class="task-list">
+              <div class="task-card">
+                <div class="task-row">
+                  <div class="task-num">1</div>
+                  <input class="task-input" placeholder="任务名称" value="背英语单词">
+                  <span class="delete-btn show">✕</span>
+                </div>
+                <div class="time-row">
+                  <span class="time-icon">🕐</span>
+                  <span class="time-label">倒计时:</span>
+                  <input class="time-input" value="25" style="width:65px"><div class="time-unit">分</div>
+                  <span class="time-colon">:</span>
+                  <input class="time-input" value="00" style="width:55px"><div class="time-unit">秒</div>
+                </div>
+              </div>
+              <div class="task-card">
+                <div class="task-row">
+                  <div class="task-num">2</div>
+                  <input class="task-input" placeholder="任务名称" value="做数学题">
+                  <span class="delete-btn show">✕</span>
+                </div>
+                <div class="time-row">
+                  <span class="time-icon">🕐</span>
+                  <span class="time-label">倒计时:</span>
+                  <input class="time-input" value="45" style="width:65px"><div class="time-unit">分</div>
+                  <span class="time-colon">:</span>
+                  <input class="time-input" value="00" style="width:55px"><div class="time-unit">秒</div>
+                </div>
+              </div>
+              <div class="task-card">
+                <div class="task-row">
+                  <div class="task-num">3</div>
+                  <input class="task-input" placeholder="任务名称" value="整理笔记">
+                  <span class="delete-btn show">✕</span>
+                </div>
+                <div class="time-row">
+                  <span class="time-icon">🕐</span>
+                  <span class="time-label">倒计时:</span>
+                  <input class="time-input" value="10" style="width:65px"><div class="time-unit">分</div>
+                  <span class="time-colon">:</span>
+                  <input class="time-input" value="00" style="width:55px"><div class="time-unit">秒</div>
+                </div>
+              </div>
+              <div class="task-card">
+                <div class="task-row">
+                  <div class="task-num">4</div>
+                  <input class="task-input" placeholder="任务名称" value="">
+                  <span class="delete-btn show">✕</span>
+                </div>
+                <div class="time-row">
+                  <span class="time-icon">🕐</span>
+                  <span class="time-label">倒计时:</span>
+                  <input class="time-input" value="5" style="width:65px"><div class="time-unit">分</div>
+                  <span class="time-colon">:</span>
+                  <input class="time-input" value="0" style="width:55px"><div class="time-unit">秒</div>
+                </div>
+              </div>
+              <div class="task-card">
+                <div class="task-row">
+                  <div class="task-num">5</div>
+                  <input class="task-input" placeholder="任务名称" value="休息放松">
+                  <span class="delete-btn show">✕</span>
+                </div>
+                <div class="time-row">
+                  <span class="time-icon">🕐</span>
+                  <span class="time-label">倒计时:</span>
+                  <input class="time-input" value="15" style="width:65px"><div class="time-unit">分</div>
+                  <span class="time-colon">:</span>
+                  <input class="time-input" value="0" style="width:55px"><div class="time-unit">秒</div>
+                </div>
+              </div>
+              <button class="add-btn">＋ 添加任务</button>
+            </div>
+            <div class="bottom-bar">
+              <button class="start-btn">▶ 开始运行</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-label">📋 设置画面 — 输入任务名+设定倒计时</div>
+    </div>
+
+    <!-- Screen 2: Countdown -->
+    <div class="phone-wrap" id="screen-1">
+      <div class="phone">
+        <div class="phone-inner">
+          <div class="notch"></div>
+          <div class="screen-countdown">
+            <div class="progress-text">任务 2 / 3</div>
+            <div class="task-name">做数学题</div>
+            <div class="countdown-number red" id="countdownDisplay">00:58</div>
+            <div class="last-minute-hint">⏰ 最后一分钟！</div>
+            <div class="progress-bar-wrap">
+              <div class="progress-bar-fill red" id="progressFill" style="width: 22%"></div>
+            </div>
+            <button class="stop-btn">停止</button>
+          </div>
+        </div>
+      </div>
+      <div class="phone-label">⏳ 倒计时画面 — 最后一分钟红色脉冲效果</div>
+    </div>
+
+    <!-- Screen 3: Congratulations -->
+    <div class="phone-wrap" id="screen-2">
+      <div class="phone">
+        <div class="phone-inner">
+          <div class="notch"></div>
+          <div class="screen-completed">
+            <div class="star-icon">⭐</div>
+            <div class="congrats-title">🎉 恭喜！🎉</div>
+            <div class="congrats-sub">所有任务已完成！</div>
+            <div class="congrats-count">你完成了 3 个任务</div>
+            <div class="review-card">
+              <div class="review-title">任务回顾</div>
+              <div class="review-item"><span class="review-idx">1.</span><span class="review-name">背英语单词</span><span class="review-time">25:00</span></div>
+              <div class="review-item"><span class="review-idx">2.</span><span class="review-name">做数学题</span><span class="review-time">45:00</span></div>
+              <div class="review-item"><span class="review-idx">3.</span><span class="review-name">整理笔记</span><span class="review-time">10:00</span></div>
+            </div>
+            <button class="restart-btn">返回设置</button>
+          </div>
+        </div>
+      </div>
+      <div class="phone-label">🎉 恭喜画面 — 带动画效果 + 任务回顾</div>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentTab = 0;
+function switchTab(idx) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', i===idx));
+  document.querySelectorAll('.phone-wrap').forEach((w,i) => w.classList.toggle('active', i===idx));
+  currentTab = idx;
+}
+
+// 模拟倒计时动画
+let seconds = 58;
+setInterval(() => {
+  seconds--;
+  if (seconds < 0) seconds = 59;
+  const el = document.getElementById('countdownDisplay');
+  if (el) {
+    const m = String(Math.floor(seconds / 60)).padStart(2, '0');
+    const s = String(seconds % 60).padStart(2, '0');
+    el.textContent = `${m}:${s}`;
+  }
+  const pf = document.getElementById('progressFill');
+  if (pf) pf.style.width = `${(seconds/60)*100}%`;
+}, 1000);
+</script>
+
+</body>
+</html>
