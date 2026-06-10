@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
@@ -42,7 +43,8 @@ class MainActivity : ComponentActivity() {
 fun TaskCountdownApp(
     viewModel: TaskViewModel = viewModel()
 ) {
-    val soundManager = remember { SoundManager(LocalContext.current) }
+    val context = LocalContext.current
+    val soundManager = remember { SoundManager(context) }
     val appState = viewModel.appState
 
     // 处理倒计时结束音效
