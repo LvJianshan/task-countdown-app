@@ -100,8 +100,8 @@ class TaskViewModel : ViewModel() {
     var isPaused by mutableStateOf(false)
         private set
 
-    /** 当前任务已跑过的实际秒数（暂停时不增加） */
-    private var taskRunningSeconds = 0L
+    /** 当前任务开始时刻的系统时间戳（用于计算实际墙钟耗时） */
+    private var taskStartWallClockMs = 0L
 
     /** 每个任务的实际耗时（秒），用于恭喜画面展示 */
     private val _actualTimes = mutableStateListOf<Long>()
@@ -150,7 +150,7 @@ class TaskViewModel : ViewModel() {
         _actualTimes.clear()
         hasTakenMidpointPhoto = false
         nextTenMinMark = 0L
-        taskRunningSeconds = 0L
+        taskStartWallClockMs = 0L
     }
 
     /**
@@ -221,7 +221,7 @@ class TaskViewModel : ViewModel() {
         _actualTimes.clear()
         hasTakenMidpointPhoto = false
         nextTenMinMark = 0L
-        taskRunningSeconds = 0L
+        taskStartWallClockMs = System.currentTimeMillis()
         startTimer()
         return true
     }
@@ -236,9 +236,12 @@ class TaskViewModel : ViewModel() {
 
     /**
      * 获取当前任务已过的实际耗时（秒）
-     * 暂停不计入耗时，基于计数器累加
+     * 从任务开始到现在的墙钟时间，包含暂停
      */
-    fun currentActualElapsedSeconds(): Long = taskRunningSeconds
+    fun currentActualElapsedSeconds(): Long {
+        if (!isRunning && appState != AppState.COUNTDOWN) return 0L
+        return (System.currentTimeMillis() - taskStartWallClockMs) / 1000
+    }
 
     /**
      * 启动倒计时协程
@@ -263,7 +266,6 @@ class TaskViewModel : ViewModel() {
 
                 delay(1000L)
                 remainingSeconds--
-                taskRunningSeconds++  // 每走一秒实际计时，计数器加一
 
                 // === 中点拍照触发（进度到 50% 时）===
                 if (!hasTakenMidpointPhoto && isRunning) {
@@ -290,8 +292,9 @@ class TaskViewModel : ViewModel() {
             }
             // 倒计时结束，触发音效
             if (isRunning) {
-                // 记录当前任务的实际耗时（计数器累加值，不受暂停影响）
-                _actualTimes.add(taskRunningSeconds.coerceAtLeast(1L))
+                // 记录当前任务的实际耗时（墙钟时间：从任务开始到结束的总时长，含暂停）
+                val wallClockMs = System.currentTimeMillis() - taskStartWallClockMs
+                _actualTimes.add((wallClockMs / 1000).coerceAtLeast(1L))
 
                 // === 结束拍照触发（任务完成瞬间）===
                 val endedTask = _tasks.getOrNull(currentTaskIndex)
@@ -307,7 +310,7 @@ class TaskViewModel : ViewModel() {
                 if (currentTaskIndex < totalValidTasks - 1) {
                     currentTaskIndex++
                     remainingSeconds = _tasks[currentTaskIndex].totalSeconds
-                    taskRunningSeconds = 0L
+                    taskStartWallClockMs = System.currentTimeMillis()
                     hasTakenMidpointPhoto = false
                     nextTenMinMark = 0L
                     startTimer()
