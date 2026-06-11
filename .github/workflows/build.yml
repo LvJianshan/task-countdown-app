@@ -103,11 +103,14 @@ jobs:
             git clone "$GITEE_URL" /tmp/gitee-publish
           cd /tmp/gitee-publish
 
+          # 设置 git 用户信息
+          git config user.name "LvJianshan"
+          git config user.email "lvjianshan@users.noreply.github.com"
+
           # 切换到 downloads 分支（或新建 orphan）
           if git ls-remote origin "$DOWNLOAD_BRANCH" | grep -q .; then
             git fetch origin "$DOWNLOAD_BRANCH"
-            git checkout -f "$DOWNLOAD_BRANCH"
-            # 只移除旧 apk 文件，保留 index.html
+            git checkout -B "$DOWNLOAD_BRANCH" "origin/$DOWNLOAD_BRANCH"
             git rm -f apk/*.apk 2>/dev/null || true
           else
             git checkout --orphan "$DOWNLOAD_BRANCH"
