@@ -1,8 +1,14 @@
 package com.taskcountdown.app.ui.screens
 
+import android.Manifest
 import android.app.Activity
 import android.view.WindowManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -12,11 +18,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.taskcountdown.app.ui.theme.RedWarning
+import com.taskcountdown.app.util.CameraManager
+import com.taskcountdown.app.viewmodel.PhotoPhase
+import com.taskcountdown.app.viewmodel.PhotoRecord
 import com.taskcountdown.app.viewmodel.TaskViewModel
 
 /**
@@ -42,6 +52,55 @@ fun CountdownScreen(
         }
     }
 
+    // ==================== 自动拍照 ====================
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val cameraManager = remember { CameraManager(context) }
+    var cameraReady by remember { mutableStateOf(false) }
+    var lastPhotoTaken by remember { mutableStateOf(0L) } // 用于闪烁相机图标
+    val isCameraAnimating = remember(lastPhotoTaken) { lastPhotoTaken > 0 }
+
+    // 请求相机权限
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            cameraManager.initialize(lifecycleOwner)
+            cameraReady = true
+        }
+    }
+
+    // 进入画面时请求相机权限
+    LaunchedEffect(Unit) {
+        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+    }
+
+    // 监听拍照事件，触发拍照（不阻塞倒计时）
+    LaunchedEffect(Unit) {
+        viewModel.captureEvent.collect { event ->
+            if (cameraReady) {
+                val photoFile = cameraManager.takePhoto()
+                if (photoFile != null) {
+                    viewModel.addCapturedPhoto(
+                        PhotoRecord(
+                            taskIndex = event.taskIndex,
+                            taskName = event.taskName,
+                            filePath = photoFile.absolutePath,
+                            phase = event.phase
+                        )
+                    )
+                    lastPhotoTaken = System.currentTimeMillis()
+                }
+            }
+        }
+    }
+
+    // 离开画面时释放相机
+    DisposableEffect(Unit) {
+        onDispose {
+            cameraManager.release()
+        }
+    }
+
     // 动画：数字变化时的脉冲效果
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulseAlpha by infiniteTransition.animateFloat(
@@ -63,6 +122,27 @@ fun CountdownScreen(
             .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center
     ) {
+        // 相机拍照指示器（右上角）
+        AnimatedVisibility(
+            visible = isCameraAnimating,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 48.dp, end = 24.dp),
+            enter = fadeIn(animationSpec = tween(200)) + scaleIn(initialScale = 0.5f),
+            exit = fadeOut(animationSpec = tween(500))
+        ) {
+            Surface(
+                shape = MaterialTheme.shapes.small,
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f)
+            ) {
+                Text(
+                    text = "📸",
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.labelLarge
+                )
+            }
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()

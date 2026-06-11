@@ -11,6 +11,9 @@ import androidx.lifecycle.viewModelScope
 import com.taskcountdown.app.model.Task
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 
 /**
@@ -21,6 +24,33 @@ enum class AppState {
     COUNTDOWN,      // 倒计时画面
     COMPLETED       // 恭喜完成画面
 }
+
+/**
+ * 拍照阶段
+ */
+enum class PhotoPhase {
+    MIDPOINT,   // 任务进行到一半时拍照
+    END         // 任务结束时拍照
+}
+
+/**
+ * 拍照事件（ViewModel 发送给 UI 层）
+ */
+data class CaptureEvent(
+    val taskIndex: Int,
+    val taskName: String,
+    val phase: PhotoPhase
+)
+
+/**
+ * 照片记录（保存到 ViewModel 供恭喜画面展示）
+ */
+data class PhotoRecord(
+    val taskIndex: Int,
+    val taskName: String,
+    val filePath: String,
+    val phase: PhotoPhase
+)
 
 /**
  * 任务倒计时ViewModel - 管理所有业务逻辑
@@ -64,6 +94,19 @@ class TaskViewModel : ViewModel() {
     var shouldPlayCongratulations by mutableStateOf(false)
         private set
 
+    // ==================== 拍照相关 ====================
+
+    /** 拍照事件流（ViewModel → UI，UI 层收到后执行拍照） */
+    private val _captureEvent = MutableSharedFlow<CaptureEvent>(extraBufferCapacity = 64)
+    val captureEvent: SharedFlow<CaptureEvent> = _captureEvent.asSharedFlow()
+
+    /** 已拍摄的照片记录 */
+    private val _capturedPhotos = mutableStateListOf<PhotoRecord>()
+    val capturedPhotos: List<PhotoRecord> get() = _capturedPhotos
+
+    /** 当前任务是否已拍过中点照 */
+    private var hasTakenMidpointPhoto = false
+
     init {
         // 默认初始化5个任务
         resetToDefaults()
@@ -83,6 +126,8 @@ class TaskViewModel : ViewModel() {
         isRunning = false
         shouldPlayBeep = false
         shouldPlayCongratulations = false
+        _capturedPhotos.clear()
+        hasTakenMidpointPhoto = false
     }
 
     /**
@@ -148,22 +193,48 @@ class TaskViewModel : ViewModel() {
         remainingSeconds = _tasks[0].totalSeconds
         appState = AppState.COUNTDOWN
         isRunning = true
+        _capturedPhotos.clear()
+        hasTakenMidpointPhoto = false
         startTimer()
         return true
     }
 
     /**
      * 启动倒计时协程
+     * 每次循环后检查中点/结束拍照条件，发送事件到 UI 层
      */
     private fun startTimer() {
         timerJob?.cancel()
+        val currentTask = _tasks.getOrNull(currentTaskIndex)
+        val taskName = currentTask?.name ?: ""
+        hasTakenMidpointPhoto = false
         timerJob = viewModelScope.launch {
             while (remainingSeconds > 0 && isRunning) {
                 delay(1000L)
                 remainingSeconds--
+
+                // === 中点拍照触发（进度到 50% 时）===
+                if (!hasTakenMidpointPhoto && isRunning) {
+                    val task = _tasks.getOrNull(currentTaskIndex) ?: continue
+                    val halfPoint = task.totalSeconds / 2
+                    if (remainingSeconds == halfPoint && task.totalSeconds > 1) {
+                        hasTakenMidpointPhoto = true
+                        _captureEvent.trySend(
+                            CaptureEvent(currentTaskIndex, task.name, PhotoPhase.MIDPOINT)
+                        )
+                    }
+                }
             }
             // 倒计时结束，触发音效
             if (isRunning) {
+                // === 结束拍照触发（任务完成瞬间）===
+                val endedTask = _tasks.getOrNull(currentTaskIndex)
+                if (endedTask != null) {
+                    _captureEvent.trySend(
+                        CaptureEvent(currentTaskIndex, endedTask.name, PhotoPhase.END)
+                    )
+                }
+
                 shouldPlayBeep = true
                 delay(100L) // 短暂等待音效触发
                 // 进入下一个任务
@@ -193,6 +264,13 @@ class TaskViewModel : ViewModel() {
      */
     fun onCongratulationsHandled() {
         shouldPlayCongratulations = false
+    }
+
+    /**
+     * 添加拍摄的照片记录（由 UI 层在拍照完成后调用）
+     */
+    fun addCapturedPhoto(record: PhotoRecord) {
+        _capturedPhotos.add(record)
     }
 
     /**
