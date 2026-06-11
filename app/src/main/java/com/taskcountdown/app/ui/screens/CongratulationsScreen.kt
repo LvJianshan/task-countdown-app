@@ -159,6 +159,8 @@ fun CongratulationsScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     viewModel.tasks.forEachIndexed { index, task ->
+                        val actualTime = if (index < viewModel.actualTimes.size)
+                            viewModel.actualTimes[index] else task.totalSeconds
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -170,7 +172,7 @@ fun CongratulationsScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.width(28.dp)
+                                modifier = Modifier.width(20.dp)
                             )
                             Text(
                                 text = task.name,
@@ -178,11 +180,35 @@ fun CongratulationsScreen(
                                 color = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.weight(1f)
                             )
+
+                            Spacer(modifier = Modifier.width(4.dp))
+
+                            // 设定时间（灰色）
                             Text(
                                 text = viewModel.formatTime(task.totalSeconds),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                             )
+
+                            Text(
+                                text = "  →  ",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                            )
+
+                            // 实际时间（蓝色背景）
+                            Surface(
+                                shape = MaterialTheme.shapes.small,
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    text = viewModel.formatTime(actualTime),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                )
+                            }
                         }
                     }
                 }

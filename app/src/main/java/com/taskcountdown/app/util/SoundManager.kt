@@ -106,21 +106,22 @@ class SoundManager(private val context: Context) {
 
     /**
      * 通过 AudioTrack 播放 PCM 样本
-     * 使用 STREAM_ALARM 确保高音量
+     * 使用 STREAM_NOTIFICATION 跟随系统铃声/通知音量
+     * 系统静音或震动模式下不发声
      */
     private fun playSamples(samples: ShortArray) {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-        val maxVol = audioManager?.getStreamMaxVolume(AudioManager.STREAM_ALARM) ?: 7
-        val currentVol = audioManager?.getStreamVolume(AudioManager.STREAM_ALARM) ?: 0
-        // 如果音量太低，临时提高
-        if (currentVol < maxVol / 2) {
-            audioManager?.setStreamVolume(AudioManager.STREAM_ALARM, maxVol, 0)
+
+        // 检查系统铃声模式：静音或震动时不播放
+        val ringerMode = audioManager?.ringerMode ?: AudioManager.RINGER_MODE_NORMAL
+        if (ringerMode == AudioManager.RINGER_MODE_SILENT || ringerMode == AudioManager.RINGER_MODE_VIBRATE) {
+            return
         }
 
         val track = AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
                     .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                     .build()
             )

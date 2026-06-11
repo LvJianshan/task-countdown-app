@@ -94,6 +94,25 @@ class TaskViewModel : ViewModel() {
     var shouldPlayCongratulations by mutableStateOf(false)
         private set
 
+    // ==================== 暂停相关 ====================
+
+    /** 是否处于暂停状态 */
+    var isPaused by mutableStateOf(false)
+        private set
+
+    /** 当前任务开始时的系统时间戳（用于计算实际耗时） */
+    private var taskStartRealtimeMs = 0L
+
+    /** 当前任务暂停的总时长（毫秒） */
+    private var taskPausedTotalMs = 0L
+
+    /** 本次暂停开始的时间戳 */
+    private var pauseStartMs = 0L
+
+    /** 每个任务的实际耗时（秒），用于恭喜画面展示 */
+    private val _actualTimes = mutableStateListOf<Long>()
+    val actualTimes: List<Long> get() = _actualTimes
+
     // ==================== 拍照相关 ====================
 
     /** 拍照事件流（ViewModel → UI，UI 层收到后执行拍照） */
@@ -106,6 +125,9 @@ class TaskViewModel : ViewModel() {
 
     /** 当前任务是否已拍过中点照 */
     private var hasTakenMidpointPhoto = false
+
+    /** 下一个10分钟拍照点（剩余秒数） */
+    private var nextTenMinMark = 0L
 
     /** 是否使用前置摄像头（true=前置，false=后置） */
     var useFrontCamera by mutableStateOf(true)
@@ -127,10 +149,16 @@ class TaskViewModel : ViewModel() {
         currentTaskIndex = 0
         remainingSeconds = 0L
         isRunning = false
+        isPaused = false
         shouldPlayBeep = false
         shouldPlayCongratulations = false
         _capturedPhotos.clear()
+        _actualTimes.clear()
         hasTakenMidpointPhoto = false
+        nextTenMinMark = 0L
+        taskStartRealtimeMs = 0L
+        taskPausedTotalMs = 0L
+        pauseStartMs = 0L
     }
 
     /**
@@ -196,30 +224,69 @@ class TaskViewModel : ViewModel() {
         remainingSeconds = _tasks[0].totalSeconds
         appState = AppState.COUNTDOWN
         isRunning = true
+        isPaused = false
         _capturedPhotos.clear()
+        _actualTimes.clear()
         hasTakenMidpointPhoto = false
+        nextTenMinMark = 0L
+        taskStartRealtimeMs = System.currentTimeMillis()
+        taskPausedTotalMs = 0L
         startTimer()
         return true
     }
 
     /**
+     * 暂停/继续切换
+     */
+    fun togglePause() {
+        if (!isRunning) return
+        isPaused = !isPaused
+        if (isPaused) {
+            // 暂停：记录暂停开始时间
+            pauseStartMs = System.currentTimeMillis()
+        } else {
+            // 恢复：累加暂停时长
+            taskPausedTotalMs += System.currentTimeMillis() - pauseStartMs
+        }
+    }
+
+    /**
+     * 获取当前任务已过的实际耗时（秒）
+     * 暂停不计入耗时
+     */
+    fun currentActualElapsedSeconds(): Long {
+        if (!isRunning) return 0L
+        val totalMs = System.currentTimeMillis() - taskStartRealtimeMs - taskPausedTotalMs
+        return totalMs / 1000
+    }
+
+    /**
      * 启动倒计时协程
+     * 支持暂停：暂停时不断循环但不减时间
      * 每次循环后检查中点/结束拍照条件，发送事件到 UI 层
      */
     private fun startTimer() {
         timerJob?.cancel()
         val currentTask = _tasks.getOrNull(currentTaskIndex)
-        val taskName = currentTask?.name ?: ""
         hasTakenMidpointPhoto = false
+        // 初始化10分钟拍照点（仅任务>10分钟时启用，从首个10分钟标记开始）
+        val taskDuration = currentTask?.totalSeconds ?: 0L
+        nextTenMinMark = if (taskDuration > 600) taskDuration - 600 else 0L
+        val halfPoint = taskDuration / 2
         timerJob = viewModelScope.launch {
             while (remainingSeconds > 0 && isRunning) {
+                // 暂停状态：不减少剩余时间，等待恢复
+                if (isPaused) {
+                    delay(200L)
+                    continue
+                }
+
                 delay(1000L)
                 remainingSeconds--
 
                 // === 中点拍照触发（进度到 50% 时）===
                 if (!hasTakenMidpointPhoto && isRunning) {
                     val task = _tasks.getOrNull(currentTaskIndex) ?: continue
-                    val halfPoint = task.totalSeconds / 2
                     if (remainingSeconds == halfPoint && task.totalSeconds > 1) {
                         hasTakenMidpointPhoto = true
                         _captureEvent.tryEmit(
@@ -227,9 +294,25 @@ class TaskViewModel : ViewModel() {
                         )
                     }
                 }
+
+                // === 每10分钟拍照触发（仅任务>10分钟）===
+                if (nextTenMinMark > 0 && remainingSeconds <= nextTenMinMark && remainingSeconds > 0 && isRunning) {
+                    val task = _tasks.getOrNull(currentTaskIndex) ?: continue
+                    // 跳过和中点重合的时间（避免重复拍）
+                    if (remainingSeconds != halfPoint) {
+                        _captureEvent.tryEmit(
+                            CaptureEvent(currentTaskIndex, task.name, PhotoPhase.MIDPOINT)
+                        )
+                    }
+                    nextTenMinMark -= 600
+                }
             }
             // 倒计时结束，触发音效
             if (isRunning) {
+                // 计算当前任务的实际耗时并保存
+                val actualMs = System.currentTimeMillis() - taskStartRealtimeMs - taskPausedTotalMs
+                _actualTimes.add((actualMs / 1000).coerceAtLeast(1L))
+
                 // === 结束拍照触发（任务完成瞬间）===
                 val endedTask = _tasks.getOrNull(currentTaskIndex)
                 if (endedTask != null) {
@@ -244,10 +327,15 @@ class TaskViewModel : ViewModel() {
                 if (currentTaskIndex < totalValidTasks - 1) {
                     currentTaskIndex++
                     remainingSeconds = _tasks[currentTaskIndex].totalSeconds
+                    taskStartRealtimeMs = System.currentTimeMillis()
+                    taskPausedTotalMs = 0L
+                    hasTakenMidpointPhoto = false
+                    nextTenMinMark = 0L
                     startTimer()
                 } else {
                     // 所有任务完成
                     isRunning = false
+                    isPaused = false
                     shouldPlayCongratulations = true
                     appState = AppState.COMPLETED
                 }
@@ -281,6 +369,7 @@ class TaskViewModel : ViewModel() {
      */
     fun stopCountdown() {
         isRunning = false
+        isPaused = false
         timerJob?.cancel()
         appState = AppState.SETUP
     }

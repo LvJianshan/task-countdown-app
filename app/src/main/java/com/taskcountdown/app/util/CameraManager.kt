@@ -83,12 +83,17 @@ class CameraManager(private val context: Context) {
                 object : ImageCapture.OnImageSavedCallback {
                     override fun onImageSaved(output: ImageCapture.OutputFileResults) {
                         // 2. 同步到系统相册（让用户在相册中可见）
-                        saveToGallery(internalFile, fileName)
-                        continuation.resume(internalFile)
+                        // 即使相册写入失败也不影响 App 内展示
+                        try {
+                            saveToGallery(internalFile, fileName)
+                        } catch (_: Exception) {
+                            // 相册写入失败不影响主流程
+                        }
+                        if (continuation.isActive) continuation.resume(internalFile)
                     }
 
                     override fun onError(exception: ImageCaptureException) {
-                        continuation.resume(null)
+                        if (continuation.isActive) continuation.resume(null)
                     }
                 }
             )

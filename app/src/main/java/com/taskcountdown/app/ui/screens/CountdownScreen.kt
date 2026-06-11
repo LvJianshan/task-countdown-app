@@ -109,13 +109,13 @@ fun CountdownScreen(
         }
     }
 
-    // 动画：数字变化时的脉冲效果
+    // 动画：数字变化时的脉冲效果（最后1分钟慢速渐变，防止晃眼）
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulseAlpha by infiniteTransition.animateFloat(
         initialValue = 1f,
         targetValue = 0.6f,
         animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = FastOutSlowInEasing),
+            animation = tween(2500, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "pulseAlpha"
@@ -220,17 +220,56 @@ fun CountdownScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 停止按钮
-            OutlinedButton(
-                onClick = {
-                    viewModel.stopCountdown()
-                    onFinish()
-                },
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-                )
+            // 暂停/继续 + 停止 按钮行
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("停止")
+                // 暂停/继续按钮
+                OutlinedButton(
+                    onClick = { viewModel.togglePause() },
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = if (viewModel.isPaused)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                    ),
+                    modifier = Modifier.padding(end = 12.dp)
+                ) {
+                    Text(
+                        text = if (viewModel.isPaused) "▶ 继续" else "⏸ 暂停"
+                    )
+                }
+
+                // 停止按钮
+                OutlinedButton(
+                    onClick = {
+                        viewModel.stopCountdown()
+                        onFinish()
+                    },
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                    )
+                ) {
+                    Text("停止")
+                }
+            }
+
+            // 暂停提示
+            if (viewModel.isPaused) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                ) {
+                    Text(
+                        text = "⏸ 已暂停，点击\"继续\"恢复倒计时",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
             }
         }
     }
