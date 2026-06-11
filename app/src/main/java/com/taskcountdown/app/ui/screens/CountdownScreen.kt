@@ -64,14 +64,22 @@ fun CountdownScreen(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            cameraManager.initialize(lifecycleOwner)
+            cameraManager.initialize(lifecycleOwner, viewModel.useFrontCamera)
             cameraReady = true
         }
     }
 
-    // 进入画面时请求相机权限
+    // 进入画面时请求相机权限（同时根据用户选择初始化摄像头）
     LaunchedEffect(Unit) {
         cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+    }
+
+    // 当摄像头选择变化时重新初始化
+    LaunchedEffect(viewModel.useFrontCamera) {
+        if (cameraReady) {
+            cameraManager.release()
+            cameraManager.initialize(lifecycleOwner, viewModel.useFrontCamera)
+        }
     }
 
     // 监听拍照事件，触发拍照（不阻塞倒计时）

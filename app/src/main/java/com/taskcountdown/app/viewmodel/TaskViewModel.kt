@@ -107,6 +107,9 @@ class TaskViewModel : ViewModel() {
     /** 当前任务是否已拍过中点照 */
     private var hasTakenMidpointPhoto = false
 
+    /** 是否使用前置摄像头（true=前置，false=后置） */
+    var useFrontCamera by mutableStateOf(true)
+
     init {
         // 默认初始化5个任务
         resetToDefaults()

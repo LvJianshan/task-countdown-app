@@ -33,10 +33,11 @@ class CameraManager(private val context: Context) {
     private var isInitialized = false
 
     /**
-     * 初始化 CameraX（前置摄像头）
+     * 初始化 CameraX
      * 只绑定 ImageCapture（无预览），后台静默拍照
+     * @param useFrontCamera true=前置摄像头，false=后置摄像头
      */
-    fun initialize(lifecycleOwner: LifecycleOwner) {
+    fun initialize(lifecycleOwner: LifecycleOwner, useFrontCamera: Boolean = true) {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
         cameraProviderFuture.addListener({
             try {
@@ -47,7 +48,8 @@ class CameraManager(private val context: Context) {
                 cameraProvider?.unbindAll()
                 cameraProvider?.bindToLifecycle(
                     lifecycleOwner,
-                    CameraSelector.DEFAULT_FRONT_CAMERA,
+                    if (useFrontCamera) CameraSelector.DEFAULT_FRONT_CAMERA
+                    else CameraSelector.DEFAULT_BACK_CAMERA,
                     imageCapture!!
                 )
                 isInitialized = true
