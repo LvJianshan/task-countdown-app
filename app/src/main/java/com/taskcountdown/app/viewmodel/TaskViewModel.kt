@@ -219,7 +219,7 @@ class TaskViewModel : ViewModel() {
                     val halfPoint = task.totalSeconds / 2
                     if (remainingSeconds == halfPoint && task.totalSeconds > 1) {
                         hasTakenMidpointPhoto = true
-                        _captureEvent.trySend(
+                        _captureEvent.tryEmit(
                             CaptureEvent(currentTaskIndex, task.name, PhotoPhase.MIDPOINT)
                         )
                     }
@@ -230,7 +230,7 @@ class TaskViewModel : ViewModel() {
                 // === 结束拍照触发（任务完成瞬间）===
                 val endedTask = _tasks.getOrNull(currentTaskIndex)
                 if (endedTask != null) {
-                    _captureEvent.trySend(
+                    _captureEvent.tryEmit(
                         CaptureEvent(currentTaskIndex, endedTask.name, PhotoPhase.END)
                     )
                 }
