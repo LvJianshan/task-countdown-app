@@ -99,8 +99,7 @@ jobs:
 
           # 准备 downloads 分支（在临时目录用新 clone，避免干扰主分支）
           rm -rf /tmp/gitee-publish
-          git clone --branch main --single-branch "$GITEE_URL" /tmp/gitee-publish 2>/dev/null || \
-            git clone "$GITEE_URL" /tmp/gitee-publish
+          git clone "$GITEE_URL" /tmp/gitee-publish
           cd /tmp/gitee-publish
 
           # 设置 git 用户信息
@@ -108,9 +107,8 @@ jobs:
           git config user.email "lvjianshan@users.noreply.github.com"
 
           # 切换到 downloads 分支（或新建 orphan）
-          if git ls-remote origin "$DOWNLOAD_BRANCH" | grep -q .; then
-            git fetch origin "$DOWNLOAD_BRANCH"
-            git checkout -B "$DOWNLOAD_BRANCH" "origin/$DOWNLOAD_BRANCH"
+          if git branch -r | grep -q "origin/$DOWNLOAD_BRANCH"; then
+            git checkout -b "$DOWNLOAD_BRANCH" "origin/$DOWNLOAD_BRANCH"
             git rm -f apk/*.apk 2>/dev/null || true
           else
             git checkout --orphan "$DOWNLOAD_BRANCH"
