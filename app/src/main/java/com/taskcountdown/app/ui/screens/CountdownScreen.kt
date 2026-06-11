@@ -161,7 +161,7 @@ fun CountdownScreen(
             // 当前任务名称
             Text(
                 text = task?.name ?: "未知任务",
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground,
                 textAlign = TextAlign.Center,

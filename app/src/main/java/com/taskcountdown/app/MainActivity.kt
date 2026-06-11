@@ -58,10 +58,8 @@ fun TaskCountdownApp(
     // 处理恭喜完成音效
     LaunchedEffect(viewModel.shouldPlayCongratulations) {
         if (viewModel.shouldPlayCongratulations) {
-            soundManager.playCongratulations(
-                scope = this,  // LaunchedEffect本身就是一个CoroutineScope
-                onComplete = { viewModel.onCongratulationsHandled() }
-            )
+            soundManager.playCongratulations()
+            viewModel.onCongratulationsHandled()
         }
     }
 
