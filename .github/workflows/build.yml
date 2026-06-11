@@ -62,8 +62,8 @@ jobs:
           files: app/build/outputs/apk/debug/*.apk
           generate_release_notes: false
 
-      # ====== 同步上传到 Gitee Releases（国内用户高速下载）======
-      - name: 🚀 上传到 Gitee Release
+      # ====== 同步到 Gitee（国内用户高速下载）======
+      - name: 🚀 同步 APK 到 Gitee
         if: github.ref == 'refs/heads/main' && env.GITEE_TOKEN != ''
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
@@ -77,52 +77,70 @@ jobs:
 
           GITEE_REPO="lvjianshan/task-countdown-app"
           TAG="v${{ github.run_number }}"
+          DOWNLOAD_BRANCH="downloads"
+          VERSIONED_NAME="task-countdown-${{ github.run_number }}.apk"
 
-          # 1. 推送 tag 到 Gitee（Release 需要先有 tag）
+          # 保存 APK 到临时目录
+          mkdir -p /tmp/apk-dist
+          cp "$APK_PATH" "/tmp/apk-dist/$VERSIONED_NAME"
+          cp "$APK_PATH" "/tmp/apk-dist/task-countdown-latest.apk"
+          echo "✅ APK 已暂存到 /tmp/apk-dist/"
+
+          # 配置 Gitee 远程
           git config user.name "LvJianshan"
           git config user.email "lvjianshan@users.noreply.github.com"
           GITEE_URL="https://oauth2:${GITEE_TOKEN}@gitee.com/${GITEE_REPO}.git"
           git remote add gitee "$GITEE_URL" 2>/dev/null || git remote set-url gitee "$GITEE_URL"
+
+          # 推送 tag
           git tag -f "$TAG"
           git push -f gitee "$TAG" 2>&1
-          echo "✅ tag 推送成功"
+          echo "✅ tag $TAG 推送成功"
 
-          # 2. 使用 API 创建/更新 Release（access_token 放在 URL query）
-          API_BASE="https://gitee.com/api/v5/repos/$GITEE_REPO"
-          AUTH="access_token=$GITEE_TOKEN"
+          # 准备 downloads 分支（在临时目录用新 clone，避免干扰主分支）
+          rm -rf /tmp/gitee-publish
+          git clone --branch main --single-branch "$GITEE_URL" /tmp/gitee-publish 2>/dev/null || \
+            git clone "$GITEE_URL" /tmp/gitee-publish
+          cd /tmp/gitee-publish
 
-          echo "⏳ 删除旧的 Release（如果有）..."
-          curl -s -X DELETE "$API_BASE/releases/tags/$TAG?$AUTH" -o /dev/null
-
-          echo "⏳ 创建 Release..."
-          BODY="✅ 自动构建 #${{ github.run_number }} ($(date '+%Y-%m-%d %H:%M'))\n📱 下载 APK 安装到手机"
-          CREATE_RESP=$(curl -s -X POST "$API_BASE/releases" \
-            -d "$AUTH&tag_name=$TAG&name=APK 构建 #${{ github.run_number }}&body=$BODY")
-          CREATE_OK=$(echo "$CREATE_RESP" | jq -r '.id // ""' 2>/dev/null)
-
-          if [ -z "$CREATE_OK" ] || [ "$CREATE_OK" = "null" ]; then
-            echo "⚠️ 创建失败，获取已存在的 Release..."
-            CREATE_OK=$(curl -s "$API_BASE/releases/tags/$TAG?$AUTH" | jq -r '.id // ""' 2>/dev/null)
-          fi
-
-          if [ -n "$CREATE_OK" ] && [ "$CREATE_OK" != "null" ]; then
-            echo "✅ Release ID: $CREATE_OK"
-
-            # 3. 上传 APK
-            echo "⏳ 上传 APK..."
-            UPLOAD_RESP=$(curl -s -X POST \
-              "$API_BASE/releases/$CREATE_OK/attach_files?$AUTH" \
-              -F "file=@$APK_PATH")
-            UPLOAD_OK=$(echo "$UPLOAD_RESP" | jq -r '.id // ""' 2>/dev/null)
-
-            if [ -n "$UPLOAD_OK" ] && [ "$UPLOAD_OK" != "null" ]; then
-              echo "🎉 APK 上传到 Gitee 成功！"
-              echo "📥 下载地址：https://gitee.com/$GITEE_REPO/releases/$TAG"
-            else
-              echo "⚠️ 上传可能失败，详情:"
-              echo "$UPLOAD_RESP" | jq . 2>/dev/null || echo "$UPLOAD_RESP" | head -c 300
-            fi
+          # 切换到 downloads 分支（或新建 orphan）
+          if git ls-remote origin "$DOWNLOAD_BRANCH" | grep -q .; then
+            git fetch origin "$DOWNLOAD_BRANCH"
+            git checkout -f "$DOWNLOAD_BRANCH"
+            # 只移除旧 apk 文件，保留 index.html
+            git rm -f apk/*.apk 2>/dev/null || true
           else
-            echo "❌ 创建 Release 失败:"
-            echo "$CREATE_RESP" | head -c 300
+            git checkout --orphan "$DOWNLOAD_BRANCH"
+            git rm -rf . 2>/dev/null || true
           fi
+
+          # 放入 APK
+          mkdir -p apk
+          cp "/tmp/apk-dist/$VERSIONED_NAME" "apk/$VERSIONED_NAME"
+          cp "/tmp/apk-dist/task-countdown-latest.apk" "apk/task-countdown-latest.apk"
+
+          # 简洁下载页
+          cat > index.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="zh-CN">
+          <head><meta charset="UTF-8"><title>任务倒计时 App 下载</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+          <body style="font-family:-apple-system,sans-serif;max-width:600px;margin:80px auto;padding:20px;background:#1a1a2e;color:#fff;text-align:center">
+            <h1>📱 任务倒计时 App</h1>
+            <p style="color:#8899aa">Android 倒计时任务管理工具</p>
+            <a href="./apk/task-countdown-latest.apk" style="display:block;padding:18px;margin:30px 0;background:#2196F3;color:#fff;border-radius:14px;text-decoration:none;font-size:22px;font-weight:bold">📥 下载 APK</a>
+            <p style="color:#556677;font-size:14px">下载后点击文件直接安装<br>如提示未知来源，请允许安装</p>
+          </body></html>
+          EOF
+
+          git add apk/ index.html
+          git commit -m "发布 APK 构建 #${{ github.run_number }}"
+          git push -f origin "$DOWNLOAD_BRANCH"
+
+          echo ""
+          echo "============================================"
+          echo "✅ APK 发布到 Gitee 成功！"
+          echo ""
+          echo "📱 手机浏览器打开这个链接下载："
+          echo "   https://gitee.com/$GITEE_REPO/raw/$DOWNLOAD_BRANCH/index.html"
+          echo "============================================"
