@@ -97,7 +97,7 @@ jobs:
           echo "📤 创建 Gitee Release..."
           CREATE_RESP=$(curl -s -X POST "$API_BASE/releases?access_token=$GITEE_TOKEN" \
             -H "Content-Type: application/json" \
-            -d "{\"tag_name\": \"$TAG\", \"name\": \"APK 构建 #${{ github.run_number }}\", \"body\": \"✅ 自动构建 #${{ github.run_number }}\\n📱 下方 APK 文件可直接下载安装\"}")
+            -d "{\"tag_name\": \"$TAG\", \"target_commitish\": \"main\", \"name\": \"APK 构建 #${{ github.run_number }}\", \"body\": \"✅ 自动构建 #${{ github.run_number }}\\n📱 下方 APK 文件可直接下载安装\"}")
 
           RELEASE_ID=$(echo "$CREATE_RESP" | jq -r '.id // ""' 2>/dev/null)
 
