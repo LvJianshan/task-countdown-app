@@ -43,7 +43,7 @@ jobs:
         run: |
           echo "RELEASE_TAG=build-$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_ENV
 
-      - name: 🚀 创建 Release 并上传 APK
+      - name: 🚀 创建 GitHub Release 并上传 APK
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
@@ -59,3 +59,61 @@ jobs:
             📱 手机直接点击下方 APK 文件下载安装
           files: app/build/outputs/apk/debug/*.apk
           generate_release_notes: false
+
+      # ====== 同步上传到 Gitee Releases（国内用户高速下载）======
+      - name: 🚀 上传到 Gitee Release
+        if: github.ref == 'refs/heads/main' && env.GITEE_TOKEN != ''
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          # 查找 APK 文件
+          APK_PATH=$(ls app/build/outputs/apk/debug/*.apk 2>/dev/null | head -1)
+          if [ -z "$APK_PATH" ]; then
+            echo "❌ 未找到 APK 文件"
+            exit 1
+          fi
+          echo "✅ 找到 APK: $APK_PATH"
+
+          # 获取 APK 文件大小（bytes）
+          APK_SIZE=$(stat -c%s "$APK_PATH")
+          echo "ℹ️ APK 大小: $APK_SIZE bytes"
+
+          # 创建 Gitee Release
+          GITEE_REPO="lvjianshan/task-countdown-app"
+          TAG="build-${{ github.run_number }}"
+
+          echo "📤 正在创建 Gitee Release..."
+          RELEASE_RESP=$(curl -s -X POST \
+            "https://gitee.com/api/v5/repos/$GITEE_REPO/releases" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"access_token\": \"$GITEE_TOKEN\",
+              \"tag_name\": \"$TAG\",
+              \"name\": \"APK 构建 #${{ github.run_number }}\",
+              \"body\": \"✅ 自动构建 #${{ github.run_number }}\n📱 下载 APK 安装到手机\n⚡ 国内高速下载\"
+            }")
+
+          RELEASE_ID=$(echo "$RELEASE_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
+
+          if [ -z "$RELEASE_ID" ]; then
+            # 可能已存在同名 Release，尝试获取现有 Release
+            echo "⚠️ 创建失败，尝试查找现有 Release..."
+            RELEASE_ID=$(curl -s "https://gitee.com/api/v5/repos/$GITEE_REPO/releases/tags/$TAG?access_token=$GITEE_TOKEN" \
+              | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
+          fi
+
+          if [ -n "$RELEASE_ID" ]; then
+            echo "✅ Release ID: $RELEASE_ID"
+
+            # 上传 APK 附件到 Gitee Release
+            echo "📤 正在上传 APK 到 Gitee..."
+            curl -s -X POST \
+              "https://gitee.com/api/v5/repos/$GITEE_REPO/releases/$RELEASE_ID/attach_files" \
+              -H "Content-Type: multipart/form-data" \
+              -F "access_token=$GITEE_TOKEN" \
+              -F "file=@$APK_PATH" \
+              | python3 -c "import sys,json; r=json.load(sys.stdin); print('✅ 上传成功' if r.get('id') else '❌ 上传失败: '+str(r))" 2>/dev/null || echo "⚠️ 上传结果解析失败"
+          else
+            echo "❌ 无法获取 Release ID"
+            echo "响应: $RELEASE_RESP"
+          fi
