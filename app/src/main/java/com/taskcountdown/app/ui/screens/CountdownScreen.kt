@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import com.taskcountdown.app.ui.theme.RedWarning
 import com.taskcountdown.app.util.CameraManager
 import com.taskcountdown.app.viewmodel.PhotoPhase
@@ -58,6 +59,14 @@ fun CountdownScreen(
     var cameraReady by remember { mutableStateOf(false) }
     var lastPhotoTaken by remember { mutableStateOf(0L) } // 用于闪烁相机图标
     val isCameraAnimating = remember(lastPhotoTaken) { lastPhotoTaken > 0 }
+
+    // 拍照后延迟800ms自动隐藏相机图标
+    LaunchedEffect(lastPhotoTaken) {
+        if (lastPhotoTaken > 0) {
+            delay(800L)
+            lastPhotoTaken = 0L
+        }
+    }
 
     // 请求相机权限
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
@@ -218,7 +227,7 @@ fun CountdownScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             // 暂停/继续 + 停止 按钮行
             Row(
@@ -227,32 +236,46 @@ fun CountdownScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // 暂停/继续按钮
-                OutlinedButton(
+                Button(
                     onClick = { viewModel.togglePause() },
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = if (viewModel.isPaused)
-                            MaterialTheme.colorScheme.primary
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (viewModel.isPaused)
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
                         else
-                            MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                        contentColor = if (viewModel.isPaused)
+                            MaterialTheme.colorScheme.onPrimary
+                        else
+                            MaterialTheme.colorScheme.primary
                     ),
-                    modifier = Modifier.padding(end = 12.dp)
+                    modifier = Modifier
+                        .height(56.dp)
+                        .padding(end = 12.dp)
                 ) {
                     Text(
-                        text = if (viewModel.isPaused) "▶ 继续" else "⏸ 暂停"
+                        text = if (viewModel.isPaused) "▶ 继续" else "⏸ 暂停",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
                     )
                 }
 
                 // 停止按钮
-                OutlinedButton(
+                Button(
                     onClick = {
                         viewModel.stopCountdown()
                         onFinish()
                     },
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-                    )
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    ),
+                    modifier = Modifier.height(56.dp)
                 ) {
-                    Text("停止")
+                    Text(
+                        text = "停止",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
 

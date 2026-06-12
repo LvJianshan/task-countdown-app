@@ -9,7 +9,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.PI
 import kotlin.math.sin
-import kotlin.random.Random
 
 /**
  * 音效管理器
@@ -24,8 +23,8 @@ class SoundManager(private val context: Context) {
     }
 
     /**
-     * 播放任务完成提示音（叮叮声，约3秒）
-     * 生成两音交替的悦耳门铃声
+     * 播放任务完成提示音（轻柔风铃声，约3秒）
+     * 低频正弦波 + 缓慢包络，柔和舒缓
      */
     suspend fun playBeep() = withContext(Dispatchers.IO) {
         try {
@@ -33,23 +32,26 @@ class SoundManager(private val context: Context) {
             val sampleCount = SAMPLE_RATE * durationMs / 1000
             val samples = ShortArray(sampleCount)
 
-            // 两音交替：880Hz (A5) 和 1100Hz (C#6)
-            val freq1 = 880.0
-            val freq2 = 1100.0
-            val cycleMs = 400 // 每个叮的周期（毫秒）
-            val samplesPerCycle = SAMPLE_RATE * cycleMs / 1000
+            // 柔和的风铃音：两个低频泛音叠加，缓慢衰减
+            val freq1 = 392.0  // G4
+            val freq2 = 523.0  // C5
+            val freq3 = 659.0  // E5
 
             for (i in samples.indices) {
-                val posInCycle = i % samplesPerCycle
-                val cycleStart = i - posInCycle
-                val freq = if ((cycleStart / samplesPerCycle) % 2 == 0) freq1 else freq2
                 val t = i.toDouble() / SAMPLE_RATE
-
-                // 正弦波 + 包络（每周期渐强渐弱）
-                val envPos = posInCycle.toDouble() / samplesPerCycle
-                val envelope = sin(PI * envPos) // 0→1→0 的包络
-                val value = (sin(2.0 * PI * freq * t) * envelope * 0.8).coerceIn(-1.0, 1.0)
-                samples[i] = (value * Short.MAX_VALUE).toInt().toShort()
+                // 整体缓慢衰减包络（前1秒渐强，后2秒渐弱）
+                val envelope: Double
+                if (t < 1.0) {
+                    envelope = sin(PI * t / 2.0)  // 0→1 缓慢渐强
+                } else {
+                    envelope = Math.exp(-1.5 * (t - 1.0))  // 指数衰减
+                }
+                // 三个泛音叠加，降低音量
+                val value1 = sin(2.0 * PI * freq1 * t) * 0.35
+                val value2 = sin(2.0 * PI * freq2 * t) * 0.25
+                val value3 = sin(2.0 * PI * freq3 * t) * 0.15
+                val value = (value1 + value2 + value3) * envelope * 0.6
+                samples[i] = (value.coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort()
             }
 
             playSamples(samples)
@@ -59,8 +61,8 @@ class SoundManager(private val context: Context) {
     }
 
     /**
-     * 播放所有任务完成音效（拍手声，约6秒）
-     * 生成白噪声 + 随机爆发模拟拍手
+     * 播放所有任务完成音效（舒缓上行琶音，约6秒）
+     * 类似音乐盒的轻柔旋律
      */
     suspend fun playCongratulations() = withContext(Dispatchers.IO) {
         try {
@@ -68,34 +70,38 @@ class SoundManager(private val context: Context) {
             val sampleCount = SAMPLE_RATE * durationMs / 1000
             val samples = ShortArray(sampleCount)
 
-            val random = Random
-            // 拍手爆发参数
-            val clapInterval = 120  // 两次拍手之间的最小间隔（样本数）
-            var nextClap = 0
+            // 舒缓的琶音序列：C4 → E4 → G4 → C5 → E5 → G5
+            val notes = listOf(
+                262.0,  // C4
+                330.0,  // E4
+                392.0,  // G4
+                523.0,  // C5
+                659.0,  // E5
+                784.0   // G5
+            )
+            val noteDuration = durationMs / notes.size  // 每个音持续时间（毫秒）
 
-            // 生成噪声 + 拍手爆发
             for (i in samples.indices) {
-                val noise = random.nextFloat() * 2f - 1f  // -1 ~ 1 白噪声
-                val clap: Float
+                val t = i.toDouble() / SAMPLE_RATE
+                val noteIndex = (i.toLong() * notes.size / sampleCount).toInt().coerceIn(0, notes.size - 1)
+                val noteStartMs = noteIndex * noteDuration
+                val noteTime = t - noteStartMs / 1000.0
 
-                if (i >= nextClap) {
-                    // 拍手爆发
-                    val burstDuration = (random.nextInt(15) + 5) * 100  // 500~2000样本
-                    val amplitude = random.nextFloat() * 0.3f + 0.7f  // 0.7~1.0
-                    nextClap = i + burstDuration + random.nextInt(clapInterval)
-
-                    // 爆发段：噪声以指数衰减模拟拍手
-                    val decay = Math.exp(-4.0 * (i % burstDuration).toDouble() / burstDuration)
-                    clap = (noise * amplitude * decay).toFloat()
-                } else {
-                    // 背景轻微噪声 + 远处的拍手
-                    val distClap = noise * 0.15f
-                    // 缓慢的全局起伏
-                    val wave = sin(i.toDouble() / SAMPLE_RATE * 4.0 * PI).toFloat() * 0.1f
-                    clap = distClap + wave
+                // 每个音的包络：渐强→持续→渐弱
+                val noteDurSec = noteDuration / 1000.0
+                val envelope = when {
+                    noteTime < 0.2 -> noteTime / 0.2  // 0→1 渐强
+                    noteTime > noteDurSec - 0.3 -> ((noteDurSec - noteTime) / 0.3).coerceIn(0.0, 1.0)  // 渐弱
+                    else -> 1.0
                 }
 
-                samples[i] = (clap.coerceIn(-1.0f, 1.0f) * Short.MAX_VALUE).toInt().toShort()
+                val freq = notes[noteIndex]
+                // 基音 + 柔和泛音
+                val value = (sin(2.0 * PI * freq * t) * 0.4
+                    + sin(2.0 * PI * freq * 2 * t) * 0.1
+                    + sin(2.0 * PI * freq * 3 * t) * 0.05) * envelope * 0.5
+
+                samples[i] = (value.coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort()
             }
 
             playSamples(samples)
